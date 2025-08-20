@@ -6,10 +6,12 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "tsx src/scripts/seedDoctors.ts"
   },
   "dependencies": {
     "groq-sdk": "^0.30.0",
+    "mongoose": "^8.17.2",
     "next": "15.5.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"
@@ -23,6 +25,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.4",
     "typescript": "^5"
   }
 }

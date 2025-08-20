@@ -4,6 +4,8 @@ import {
   AgentContext,
   AgentResponse,
 } from "./BaseAgent";
+import connectDB from '../database';
+import { Doctor } from '../../models/Doctor';
 
 export class ReceptionAgent extends BaseAgent {
   constructor() {
@@ -210,36 +212,31 @@ Insurance information: We accept most major insurance providers. Please have you
       );
 
       if (mentionedDepartment) {
-        // Mock doctor data for now
-        const mockDoctors = [
-          {
-            firstName: "John",
-            lastName: "Smith",
-            specialization: "Cardiology",
-          },
-          {
-            firstName: "Sarah",
-            lastName: "Johnson",
-            specialization: "Neurology",
-          },
-          {
-            firstName: "Michael",
-            lastName: "Brown",
-            specialization: "Orthopedics",
-          },
-        ];
+        // Fetch real doctor data from database
+        await connectDB();
+        const doctors = await Doctor.find({ 
+          department: mentionedDepartment.charAt(0).toUpperCase() + mentionedDepartment.slice(1),
+          isActive: true 
+        }).select('firstName lastName specialization experience');
 
-        const doctorList = mockDoctors
-          .map(
-            (doc) =>
-              `- Dr. ${doc.firstName} ${doc.lastName} (${doc.specialization})`
-          )
-          .join("\n");
+        if (doctors && doctors.length > 0) {
+          const doctorList = doctors
+            .map(
+              (doc: any) =>
+                `- Dr. ${doc.firstName} ${doc.lastName} (${doc.specialization}) - ${doc.experience} years experience`
+            )
+            .join("\n");
 
-        return {
-          content: `Here are the available doctors in ${mentionedDepartment}:\n\n${doctorList}\n\nWould you like to book an appointment with any of these doctors?`,
-          confidence: 0.9,
-        };
+          return {
+            content: `Here are the available doctors in ${mentionedDepartment}:\n\n${doctorList}\n\nWould you like to book an appointment with any of these doctors?`,
+            confidence: 0.9,
+          };
+        } else {
+          return {
+            content: `I don't see any available doctors in the ${mentionedDepartment} department at the moment. Please contact our reception desk for assistance.`,
+            confidence: 0.7,
+          };
+        }
       }
 
       const response = await this.generateResponse(userMessage, context);
