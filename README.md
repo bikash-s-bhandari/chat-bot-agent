@@ -1,24 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Chatbot with Groq
 
-## Getting Started
+A simple chatbot application built with Next.js and powered by the Groq API. This project provides a modern, responsive chat interface for interacting with AI models.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- 🤖 Real-time chat interface with AI
+- 💬 Modern, responsive UI with Tailwind CSS
+- ⚡ Fast responses powered by Groq's LLM models
+- 📱 Mobile-friendly design
+- 🔄 Loading states and error handling
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Prerequisites
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Before running this project, you'll need:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. A Groq API key - Get one from [Groq Console](https://console.groq.com/)
+2. Node.js 18+ installed on your system
+
+## Setup
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Set up environment variables:**
+   Create a `.env.local` file in the root directory and add your Groq API key:
+   ```bash
+   GROQ_API_KEY=your_groq_api_key_here
+   ```
+
+3. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser:**
+   Navigate to [http://localhost:3000](http://localhost:3000) to see the chatbot in action.
+
+## Usage
+
+- Type your message in the input field at the bottom
+- Press Enter or click the Send button to send your message
+- The AI will respond using Groq's Llama3-8b model
+- Messages are displayed in a chat-like interface with timestamps
 
 ## Learn More
 
