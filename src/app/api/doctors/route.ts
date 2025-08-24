@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const specialization = searchParams.get('specialization');
     const isActive = searchParams.get('isActive');
 
-    let query: any = {};
+    const query: Record<string, unknown> = {};
 
     if (department) {
       query.department = department;

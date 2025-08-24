@@ -129,8 +129,7 @@ DoctorSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-// Index for efficient queries
-DoctorSchema.index({ email: 1 });
+// Index for efficient queries (email already indexed via unique)
 DoctorSchema.index({ department: 1 });
 DoctorSchema.index({ specialization: 1 });
 DoctorSchema.index({ isActive: 1 });

@@ -5,7 +5,26 @@ import {
   AgentResponse,
 } from "./BaseAgent";
 import connectDB from '../database';
-import { Doctor } from '../../models/Doctor';
+import { Doctor, IDoctor } from '../../models/Doctor';
+import { Patient, IPatient } from '../../models/Patient';
+import { Appointment, IAppointment } from '../../models/Appointment';
+import { FilterQuery } from 'mongoose';
+
+type BookingDetails = {
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  doctorId?: string;
+  doctorName?: string;
+  appointmentDate?: string;
+  startTime?: string;
+  type?: string;
+  reason?: string;
+};
 
 export class ReceptionAgent extends BaseAgent {
   constructor() {
@@ -188,9 +207,8 @@ Insurance information: We accept most major insurance providers. Please have you
     if (lowerMessage.includes("book") || lowerMessage.includes("schedule")) {
       return {
         content:
-          "I'd be happy to help you book an appointment. To get started, I'll need some information:\n\n1. What type of appointment do you need? (consultation, follow-up, routine check-up, etc.)\n2. Do you have a preferred doctor or department?\n3. What's your preferred date and time?\n4. What's the reason for your visit?\n\nPlease provide these details so I can assist you better.",
+          "I'd be happy to help you book an appointment! Please fill out the form below with your information and appointment details.",
         confidence: 0.9,
-        nextAgent: "NurseAgent", // For symptom assessment
       };
     }
 
@@ -242,13 +260,19 @@ Insurance information: We accept most major insurance providers. Please have you
         lowerMessage.includes(dept)
       );
 
-      // Check for specific doctor reference (e.g., "Dr. Smith" or "his")
-      const doctorMatch = lowerMessage.match(/dr\.?\s+([a-zA-Z\s]+)/) || 
-                         (lowerMessage.includes("his") || lowerMessage.includes("her") ? 
-                          context.previousMessages?.slice(-2).find(msg => msg.content.includes("Dr.")) : null);
-      const doctorName = doctorMatch ? 
-        (typeof doctorMatch === 'string' ? doctorMatch : doctorMatch[1]?.trim()) || 
-        (doctorMatch?.content?.match(/Dr\.?\s+([a-zA-Z\s]+)/)?.[1]?.trim()) : null;
+             // Check for specific doctor reference (e.g., "Dr. Smith" or "his")
+       const doctorMatch = lowerMessage.match(/dr\.?\s+([a-zA-Z\s]+)/);
+       let doctorName: string | null = null;
+       
+       if (doctorMatch && doctorMatch[1]) {
+         doctorName = doctorMatch[1].trim();
+       } else if (lowerMessage.includes("his") || lowerMessage.includes("her")) {
+         const previousMessage = context.previousMessages?.slice(-2).find(msg => msg.content.includes("Dr."));
+         if (previousMessage) {
+           const match = previousMessage.content.match(/Dr\.?\s+([a-zA-Z\s]+)/);
+           doctorName = match ? match[1].trim() : null;
+         }
+       }
 
       console.log("Mentioned department:", mentionedDepartment);
       console.log("Mentioned doctor name:", doctorName);
@@ -271,8 +295,8 @@ Insurance information: We accept most major insurance providers. Please have you
 
           if (doctor) {
             const availabilityList = doctor.availability
-              .filter(slot => slot.isAvailable)
-              .map(slot => {
+              .filter((slot: IDoctor['availability'][number]) => slot.isAvailable)
+              .map((slot: IDoctor['availability'][number]) => {
                 const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
                 return `- ${days[slot.dayOfWeek]}: ${slot.startTime} - ${slot.endTime}`;
               })
@@ -448,5 +472,210 @@ Insurance information: We accept most major insurance providers. Please have you
       content: response,
       confidence: 0.8,
     };
+  }
+
+  private normalizeTimeTo24Hour(timeInput: string): string | null {
+    const trimmed = timeInput.trim();
+    const twelveHourMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
+    if (twelveHourMatch) {
+      let hours = parseInt(twelveHourMatch[1], 10);
+      const minutes = twelveHourMatch[2];
+      const period = twelveHourMatch[3].toLowerCase();
+      if (period === 'pm' && hours < 12) hours += 12;
+      if (period === 'am' && hours === 12) hours = 0;
+      const hh = hours.toString().padStart(2, '0');
+      return `${hh}:${minutes}`;
+    }
+    const twentyFourHourMatch = trimmed.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    return twentyFourHourMatch ? trimmed : null;
+  }
+
+  private parseKeyValue(message: string, key: string): string | null {
+    const regex = new RegExp(`${key}\\s*[:=-]\\s*(.+)`, 'i');
+    const match = message.match(regex);
+    return match ? match[1].trim() : null;
+  }
+
+  private extractBookingDetails(message: string): BookingDetails {
+    const details: BookingDetails = {};
+
+    const firstName = this.parseKeyValue(message, 'first name') || this.parseKeyValue(message, 'firstname');
+    if (firstName) details.firstName = firstName;
+    const lastName = this.parseKeyValue(message, 'last name') || this.parseKeyValue(message, 'lastname');
+    if (lastName) details.lastName = lastName;
+    const dob = this.parseKeyValue(message, 'date of birth') || this.parseKeyValue(message, 'dob');
+    if (dob) details.dateOfBirth = dob;
+    const gender = this.parseKeyValue(message, 'gender');
+    if (gender) details.gender = gender;
+    const email = this.parseKeyValue(message, 'email');
+    if (email) details.email = email;
+    const phone = this.parseKeyValue(message, 'phone');
+    if (phone) details.phone = phone;
+    const address = this.parseKeyValue(message, 'address');
+    if (address) details.address = address;
+    const typeVal = this.parseKeyValue(message, 'type');
+    if (typeVal) details.type = typeVal;
+    const reason = this.parseKeyValue(message, 'reason') || this.parseKeyValue(message, 'note');
+    if (reason) details.reason = reason;
+
+    const doctorId = this.parseKeyValue(message, 'doctorid') || this.parseKeyValue(message, 'doctor id');
+    if (doctorId) details.doctorId = doctorId;
+
+    const doctorMatch = message.match(/dr\.?\s+([a-zA-Z]+)\s+([a-zA-Z]+)/i);
+    if (doctorMatch) {
+      details.doctorName = `${doctorMatch[1]} ${doctorMatch[2]}`;
+    }
+
+    const dateVal = this.parseKeyValue(message, 'date') || this.parseKeyValue(message, 'appointment date');
+    if (dateVal) details.appointmentDate = dateVal;
+
+    const timeVal = this.parseKeyValue(message, 'time') || this.parseKeyValue(message, 'start time');
+    if (timeVal) details.startTime = timeVal;
+
+    // Fallback email/phone extraction from free text
+    if (!details.email) {
+      const emailMatch = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      if (emailMatch) details.email = emailMatch[0];
+    }
+    if (!details.phone) {
+      const phoneMatch = message.replace(/[^0-9]/g, ' ').match(/\b(\d{10,15})\b/);
+      if (phoneMatch) details.phone = phoneMatch[1];
+    }
+
+    return details;
+  }
+
+  private async tryBookAppointmentFromMessage(userMessage: string): Promise<AgentResponse | null> {
+    try {
+      await connectDB();
+      const raw = userMessage;
+      const details = this.extractBookingDetails(raw);
+
+      const missing: string[] = [];
+      const required: Array<[keyof typeof details, string]> = [
+        ['firstName', 'First name'],
+        ['lastName', 'Last name'],
+        ['dateOfBirth', 'Date of birth (YYYY-MM-DD)'],
+        ['gender', 'Gender'],
+        ['email', 'Email'],
+        ['phone', 'Phone'],
+        ['address', 'Address'],
+        ['appointmentDate', 'Date (YYYY-MM-DD)'],
+        ['startTime', 'Time (HH:MM)'],
+        ['type', 'Type'],
+        ['reason', 'Reason'],
+      ];
+
+      for (const [key, label] of required) {
+        if (!details[key]) missing.push(label);
+      }
+      if (!details.doctorId && !details.doctorName) missing.push('Doctor (Dr. First Last or doctorId)');
+
+      if (missing.length > 0) {
+        return null;
+      }
+
+      const normalizedTime = this.normalizeTimeTo24Hour(details.startTime!);
+      if (!normalizedTime) {
+        return {
+          content: 'Please provide time in HH:MM (24h) or HH:MM am/pm format.',
+          confidence: 0.8,
+        };
+      }
+
+      const appointmentDate = new Date(details.appointmentDate!);
+      if (isNaN(appointmentDate.getTime())) {
+        return {
+          content: 'Please provide a valid date in YYYY-MM-DD format.',
+          confidence: 0.8,
+        };
+      }
+
+      // Resolve doctor
+      let doctor: IDoctor | null = null;
+      if (details.doctorId) {
+        doctor = await Doctor.findOne({ doctorId: details.doctorId, isActive: true });
+      } else if (details.doctorName) {
+        const [firstName, lastName] = details.doctorName.split(/\s+/).filter(Boolean);
+        const query: FilterQuery<IDoctor> = lastName
+          ? { firstName: new RegExp(`^${firstName}$`, 'i'), lastName: new RegExp(`^${lastName}$`, 'i'), isActive: true }
+          : { firstName: new RegExp(`^${firstName}$`, 'i'), isActive: true };
+        doctor = await Doctor.findOne(query);
+      }
+
+      if (!doctor) {
+        return {
+          content: 'I could not find the specified doctor. Please provide a valid doctorId or full name (e.g., Dr. Jane Doe).',
+          confidence: 0.7,
+        };
+      }
+
+      // Check availability
+      const dayOfWeek = appointmentDate.getDay();
+      const slot = doctor.availability?.find((s: IDoctor['availability'][number]) => s.dayOfWeek === dayOfWeek && s.isAvailable && s.startTime <= normalizedTime && s.endTime > normalizedTime);
+      if (!slot) {
+        return {
+          content: 'The doctor is not available at the requested time. Please choose another time.',
+          confidence: 0.8,
+        };
+      }
+
+      // Conflict check
+      const conflict = await Appointment.findOne({
+        doctorId: doctor.doctorId,
+        appointmentDate,
+        startTime: normalizedTime,
+        status: { $in: ['scheduled', 'confirmed'] },
+      });
+      if (conflict) {
+        return {
+          content: 'This time slot is already booked. Please choose another time.',
+          confidence: 0.9,
+        };
+      }
+
+      // Ensure patient exists or create
+      let patientDoc: IPatient;
+      const foundPatient = await Patient.findOne({ email: (details.email as string).toLowerCase() });
+      if (foundPatient) {
+        patientDoc = foundPatient;
+      } else {
+        const createdPatient = new Patient({
+          firstName: details.firstName,
+          lastName: details.lastName,
+          dateOfBirth: new Date(details.dateOfBirth!),
+          gender: details.gender,
+          email: (details.email as string).toLowerCase(),
+          phone: details.phone,
+          address: details.address,
+          symptoms: [],
+        });
+        await createdPatient.save();
+        patientDoc = createdPatient;
+      }
+
+      // Create appointment
+      const appointment: IAppointment = new Appointment({
+        patientId: patientDoc.patientId,
+        doctorId: doctor.doctorId,
+        appointmentDate,
+        startTime: normalizedTime,
+        type: (details.type as IAppointment['type']) || 'consultation',
+        reason: details.reason,
+        status: 'scheduled',
+      });
+      await appointment.save();
+
+      return {
+        content: `Your appointment is booked.\n\nAppointment ID: ${appointment.appointmentId}\nPatient: ${patientDoc.firstName} ${patientDoc.lastName} (${patientDoc.patientId})\nDoctor: Dr. ${doctor.firstName} ${doctor.lastName}\nDate: ${appointmentDate.toISOString().slice(0,10)}\nTime: ${appointment.startTime}-${appointment.endTime}\nType: ${appointment.type}\nReason: ${appointment.reason}`,
+        confidence: 1.0,
+      };
+    } catch (error) {
+      console.error('Error booking appointment from message:', error);
+      return {
+        content: 'I could not complete the booking due to an internal error. Please try again shortly.',
+        confidence: 0.2,
+      };
+    }
   }
 }
